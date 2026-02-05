@@ -1,0 +1,9 @@
+body {
+    font-family: sans-serif;
+    color: #aaa;
+    background: #222;
+}
+.md h2, .md div.nonumberh2 {
+    border: none;
+    background: #fff;
+}

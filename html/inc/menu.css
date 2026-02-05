@@ -1,0 +1,43 @@
+body,html{
+    height:100%;
+    margin:0;
+    padding:0;
+    overflow: hidden;
+}
+iframe{
+    border:none
+}
+#header{
+    position:absolute;
+    top:0;
+    left:0;
+    height:100px;
+    width:100%;
+}
+#main_container{
+    position:absolute;
+    top:100px;
+    bottom:0px;
+    left:0;
+    width:100%;
+
+    /*IE6用*/
+    _top:auto;
+    _bottom:auto;
+    _padding-top:100px;
+    _padding-bottom:0px;
+}
+#main{
+    *position:absolute; /* IE7用 */
+    _position:relative; /* IE6用 */
+    width:100%;
+    height:100%;
+}
+#toc{
+    font: 100% fantasy;
+    text-align: center;
+    margin:4px;
+}
+#toc_item{
+    margin:4px;
+}

@@ -1,0 +1,56 @@
+body {
+    font-family: sans-serif;
+}
+.md h2, .md div.nonumberh2 {
+    border: none;
+    background: #eee;
+}
+#col2 {
+    column-count: 2;
+    column-gap: 3em;
+}
+#col3 {
+    column-count: 3;
+    column-gap: 3em;
+}
+
+@media print {
+  /* 章の先頭など、次の要素を新ページから開始 */
+  .pb { break-before: page; }
+
+  /* 念のため、空要素を使う場合に備えた安全策 */
+  .pagebreak {
+    break-before: page;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    line-height: 0 !important;
+  }
+}
+
+
+.hi_red     { color: #fb4934; font-weight: bold; }
+.hi_orange  { color: #fe8019; font-weight: bold; }
+.hi_yellow  { color: #fabd2f; font-weight: bold; }
+.hi_green   { color: #b8bb26; font-weight: bold; }
+.hi_aqua    { color: #8ec07c; font-weight: bold; }
+.hi_blue    { color: #707fd9; font-weight: bold; }
+.hi_purple  { color: #d3869b; font-weight: bold; }
+
+.hi_red1    { color: #cc241d; font-weight: bold; }
+.hi_orange1 { color: #d65d0e; font-weight: bold; }
+.hi_yellow1 { color: #d79921; font-weight: bold; }
+.hi_green1  { color: #98971a; font-weight: bold; }
+.hi_aqua1   { color: #689d6a; font-weight: bold; }
+.hi_blue1   { color: #458588; font-weight: bold; }
+.hi_purple1 { color: #b16286; font-weight: bold; }
+
+.hi_red2    { color: #9d0006; font-weight: bold; }
+.hi_orange2 { color: #af3a03; font-weight: bold; }
+.hi_yellow2 { color: #b57614; font-weight: bold; }
+.hi_green2  { color: #79740e; font-weight: bold; }
+.hi_aqua2   { color: #427b58; font-weight: bold; }
+.hi_blue2   { color: #076678; font-weight: bold; }
+.hi_purple2 { color: #8f3f71; font-weight: bold; }
+
