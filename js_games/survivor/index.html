@@ -187,6 +187,234 @@
       outline: 2px solid rgba(99, 240, 178, 0.8);
       outline-offset: 2px;
     }
+
+    #xp-panel {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      pointer-events: none;
+      display: grid;
+      gap: 6px;
+    }
+
+    #xp-topline {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+      text-shadow: 0 1px 1px rgba(0,0,0,0.6);
+    }
+
+    #xp-bar {
+      height: 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      overflow: hidden;
+      box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
+    }
+
+    #xp-bar-fill {
+      width: 0%;
+      height: 100%;
+      background:
+        linear-gradient(90deg, rgba(99,192,255,0.8), rgba(121,255,226,0.9));
+      transition: width 80ms linear;
+    }
+
+    #loadout-panel {
+      position: absolute;
+      right: 10px;
+      bottom: 34px;
+      width: min(46vw, 420px);
+      display: grid;
+      gap: 6px;
+      pointer-events: none;
+    }
+
+    .loadout-row {
+      background: rgba(8, 12, 24, 0.62);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 6px 8px;
+      font-size: 12px;
+      line-height: 1.25;
+      text-shadow: 0 1px 1px rgba(0,0,0,0.6);
+    }
+
+    .loadout-row.controls {
+      pointer-events: auto;
+    }
+
+    .settings-grid {
+      display: grid;
+      gap: 6px;
+    }
+
+    .settings-line {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .settings-line label {
+      color: rgba(215, 228, 255, 0.88);
+      white-space: nowrap;
+    }
+
+    .settings-line input[type="range"] {
+      width: 100%;
+      accent-color: #63f0b2;
+    }
+
+    .settings-line output {
+      min-width: 36px;
+      text-align: right;
+      color: rgba(215, 228, 255, 0.85);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toggle-btn {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 999px;
+      padding: 5px 10px;
+      background: rgba(255,255,255,0.04);
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .toggle-btn[data-on="true"] {
+      border-color: rgba(99,240,178,0.45);
+      background: rgba(99,240,178,0.12);
+      color: #dfffee;
+    }
+
+    .loadout-label {
+      color: rgba(215, 228, 255, 0.75);
+      margin-right: 6px;
+    }
+
+    .loadout-value {
+      color: rgba(215, 228, 255, 0.95);
+      word-break: break-word;
+    }
+
+    @media (max-width: 720px) {
+      #loadout-panel {
+        width: min(78vw, 420px);
+      }
+    }
+
+    #level-up-overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(4, 8, 16, 0.45);
+      backdrop-filter: blur(5px);
+      pointer-events: auto;
+    }
+
+    #level-up-overlay.visible {
+      display: flex;
+    }
+
+    .levelup-card {
+      width: min(96vw, 720px);
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(10, 16, 28, 0.94);
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 14px 45px rgba(0,0,0,0.35);
+    }
+
+    .levelup-title {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0.05em;
+    }
+
+    .levelup-subtitle {
+      margin: 6px 0 12px;
+      color: rgba(215,228,255,0.8);
+      font-size: 13px;
+    }
+
+    .levelup-choices {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .levelup-choice {
+      text-align: left;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+      color: inherit;
+      padding: 12px;
+      cursor: pointer;
+      min-height: 108px;
+    }
+
+    .levelup-choice:focus-visible {
+      outline: 2px solid rgba(99, 240, 178, 0.9);
+      outline-offset: 2px;
+    }
+
+    .levelup-choice:hover {
+      border-color: rgba(99,240,178,0.4);
+      background:
+        linear-gradient(180deg, rgba(99,240,178,0.09), rgba(255,255,255,0.03));
+    }
+
+    .levelup-key {
+      display: inline-block;
+      min-width: 22px;
+      margin-bottom: 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.15);
+      padding: 2px 8px;
+      font-size: 12px;
+      color: rgba(215,228,255,0.85);
+    }
+
+    .levelup-name {
+      margin: 0 0 6px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .levelup-desc {
+      margin: 0;
+      font-size: 13px;
+      color: rgba(215,228,255,0.82);
+      line-height: 1.35;
+    }
+
+    @media (max-width: 720px) {
+      .levelup-choices {
+        grid-template-columns: 1fr;
+      }
+
+      .levelup-choice {
+        min-height: 84px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -198,6 +426,9 @@
           <div class="chip" id="hud-res">1280x1280</div>
           <div class="chip" id="hud-hp">HP 5/5</div>
           <div class="chip" id="hud-enemies">Enemies 0</div>
+          <div class="chip" id="hud-kills">Kills 0</div>
+          <div class="chip" id="hud-level">Lv 1</div>
+          <div class="chip" id="hud-timer">10:00</div>
         </div>
         <div id="hud-right">
           <div class="chip">Move: WASD / Arrows / Left Stick</div>
@@ -205,9 +436,62 @@
       </div>
       <div id="touch-left" aria-hidden="true"></div>
       <div id="joystick" aria-hidden="true"></div>
+      <div id="loadout-panel" aria-hidden="true">
+        <div class="loadout-row"><span class="loadout-label">Weapons</span><span class="loadout-value" id="hud-owned-weapons">Bolt Wand Lv1</span></div>
+        <div class="loadout-row"><span class="loadout-label">Passives</span><span class="loadout-value" id="hud-owned-passives">None</span></div>
+        <div class="loadout-row"><span class="loadout-label">Best</span><span class="loadout-value" id="hud-best-run">Time 00:00 / Lv 1 / Kills 0</span></div>
+        <div class="loadout-row controls">
+          <div class="settings-grid">
+            <div class="toggle-row">
+              <span class="loadout-label">Mute</span>
+              <button type="button" class="toggle-btn" id="settings-mute" data-on="false">Off</button>
+            </div>
+            <div class="settings-line">
+              <label for="settings-master-volume">Master</label>
+              <input id="settings-master-volume" type="range" min="0" max="100" step="1" value="80">
+              <output id="settings-master-volume-value" for="settings-master-volume">80</output>
+            </div>
+            <div class="settings-line">
+              <label for="settings-sfx-volume">SFX</label>
+              <input id="settings-sfx-volume" type="range" min="0" max="100" step="1" value="80">
+              <output id="settings-sfx-volume-value" for="settings-sfx-volume">80</output>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="xp-panel" aria-hidden="true">
+        <div id="xp-topline">
+          <span id="xp-label">XP 0 / 5</span>
+          <span id="xp-pickup-label">Pickup 64</span>
+        </div>
+        <div id="xp-bar"><div id="xp-bar-fill"></div></div>
+      </div>
+      <div id="level-up-overlay" aria-live="polite">
+        <div class="levelup-card">
+          <h2 class="levelup-title" id="levelup-title">LEVEL UP</h2>
+          <p class="levelup-subtitle">Choose one upgrade (1-3 / tap)</p>
+          <div class="levelup-choices">
+            <button type="button" class="levelup-choice" data-upgrade-index="0">
+              <span class="levelup-key">1</span>
+              <p class="levelup-name">-</p>
+              <p class="levelup-desc">-</p>
+            </button>
+            <button type="button" class="levelup-choice" data-upgrade-index="1">
+              <span class="levelup-key">2</span>
+              <p class="levelup-name">-</p>
+              <p class="levelup-desc">-</p>
+            </button>
+            <button type="button" class="levelup-choice" data-upgrade-index="2">
+              <span class="levelup-key">3</span>
+              <p class="levelup-name">-</p>
+              <p class="levelup-desc">-</p>
+            </button>
+          </div>
+        </div>
+      </div>
       <div id="game-over-overlay" aria-live="polite">
         <div class="overlay-card">
-          <h2 class="overlay-title">GAME OVER</h2>
+          <h2 class="overlay-title" id="result-title">GAME OVER</h2>
           <p class="overlay-copy" id="game-over-copy">Press R / Enter or tap restart.</p>
           <button class="overlay-button" id="restart-button" type="button">Restart</button>
         </div>

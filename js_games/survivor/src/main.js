@@ -12,15 +12,65 @@ const ctx = canvas.getContext("2d");
 const hudRes = document.getElementById("hud-res");
 const hudHp = document.getElementById("hud-hp");
 const hudEnemies = document.getElementById("hud-enemies");
+const hudKills = document.getElementById("hud-kills");
+const hudLevel = document.getElementById("hud-level");
+const hudTimer = document.getElementById("hud-timer");
+const hudOwnedWeapons = document.getElementById("hud-owned-weapons");
+const hudOwnedPassives = document.getElementById("hud-owned-passives");
+const hudBestRun = document.getElementById("hud-best-run");
 const touchLeft = document.getElementById("touch-left");
 const joystickEl = document.getElementById("joystick");
+const xpLabel = document.getElementById("xp-label");
+const xpPickupLabel = document.getElementById("xp-pickup-label");
+const xpBarFill = document.getElementById("xp-bar-fill");
+const levelUpOverlay = document.getElementById("level-up-overlay");
+const levelUpTitle = document.getElementById("levelup-title");
+const levelUpChoiceButtons = Array.from(document.querySelectorAll(".levelup-choice"));
 const gameOverOverlay = document.getElementById("game-over-overlay");
+const resultTitle = document.getElementById("result-title");
 const gameOverCopy = document.getElementById("game-over-copy");
 const restartButton = document.getElementById("restart-button");
+const settingsMuteButton = document.getElementById("settings-mute");
+const settingsMasterVolume = document.getElementById("settings-master-volume");
+const settingsMasterVolumeValue = document.getElementById("settings-master-volume-value");
+const settingsSfxVolume = document.getElementById("settings-sfx-volume");
+const settingsSfxVolumeValue = document.getElementById("settings-sfx-volume-value");
 
-if (!ctx || !hudRes || !hudHp || !hudEnemies || !touchLeft || !joystickEl || !gameOverOverlay || !gameOverCopy || !restartButton) {
+if (
+  !ctx ||
+  !hudRes ||
+  !hudHp ||
+  !hudEnemies ||
+  !hudKills ||
+  !hudLevel ||
+  !hudTimer ||
+  !hudOwnedWeapons ||
+  !hudOwnedPassives ||
+  !hudBestRun ||
+  !touchLeft ||
+  !joystickEl ||
+  !xpLabel ||
+  !xpPickupLabel ||
+  !xpBarFill ||
+  !levelUpOverlay ||
+  !levelUpTitle ||
+  levelUpChoiceButtons.length !== 3 ||
+  !gameOverOverlay ||
+  !resultTitle ||
+  !gameOverCopy ||
+  !restartButton ||
+  !settingsMuteButton ||
+  !settingsMasterVolume ||
+  !settingsMasterVolumeValue ||
+  !settingsSfxVolume ||
+  !settingsSfxVolumeValue
+) {
   throw new Error("Canvas2D context is not available.");
 }
+
+const WEAPON_DEFS_BY_ID = Object.fromEntries(WORLD_DATA.weaponDefs.map((def) => [def.id, def]));
+const PASSIVE_DEFS_BY_ID = Object.fromEntries(WORLD_DATA.passiveDefs.map((def) => [def.id, def]));
+const SAVE_KEY = "survivor_zero_dep_save_v1";
 
 const viewport = {
   cssWidth: 0,
@@ -54,6 +104,7 @@ const input = {
 const state = {
   paused: false,
   gameOver: false,
+  victory: false,
   elapsed: 0,
   player: {
     x: VIRTUAL_WIDTH * 0.5,
@@ -69,9 +120,44 @@ const state = {
   spawn: {
     timer: WORLD_DATA.spawn.startDelaySec,
   },
+  weapon: {
+    fireCooldown: 0,
+    globalDamageMul: 1,
+    globalHasteMul: 1,
+    globalProjectileSpeedMul: 1,
+    globalProjectileSizeMul: 1,
+  },
+  weaponRuntime: {},
   enemies: [],
+  projectiles: [],
+  xpGems: [],
   nextEnemyId: 1,
   nearestEnemyId: null,
+  kills: 0,
+  progression: {
+    level: 1,
+    xp: 0,
+    xpToNext: WORLD_DATA.xp.levelBaseXp,
+    levelUpActive: false,
+    choices: [],
+    pickupRadius: WORLD_DATA.xp.pickupBaseRadius,
+    weaponLevels: {},
+    passiveLevels: {},
+    damageTakenMul: 1,
+  },
+  stage: {
+    durationSec: WORLD_DATA.stage.durationSec,
+  },
+  settings: {
+    mute: false,
+    masterVolume: 80,
+    sfxVolume: 80,
+  },
+  bestRun: {
+    bestTimeSec: 0,
+    bestLevel: 1,
+    bestKills: 0,
+  },
 };
 
 function clamp(value, min, max) {
@@ -85,39 +171,430 @@ function circlesOverlap(a, b) {
   return dx * dx + dy * dy <= radius * radius;
 }
 
+function formatClock(seconds) {
+  const whole = Math.max(0, Math.floor(seconds));
+  const mm = Math.floor(whole / 60);
+  const ss = whole % 60;
+  return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+}
+
+function safeReadSave() {
+  try {
+    const raw = window.localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function safeWriteSave(data) {
+  try {
+    window.localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  } catch {
+    // localStorage may be unavailable or full; fail silently to avoid console errors.
+  }
+}
+
+function serializeSave() {
+  return {
+    settings: {
+      mute: !!state.settings.mute,
+      masterVolume: clamp(Math.round(state.settings.masterVolume), 0, 100),
+      sfxVolume: clamp(Math.round(state.settings.sfxVolume), 0, 100),
+    },
+    bestRun: {
+      bestTimeSec: Math.max(0, Math.floor(state.bestRun.bestTimeSec)),
+      bestLevel: Math.max(1, Math.floor(state.bestRun.bestLevel)),
+      bestKills: Math.max(0, Math.floor(state.bestRun.bestKills)),
+    },
+  };
+}
+
+function savePersistentState() {
+  safeWriteSave(serializeSave());
+}
+
+function applySettingsToUi() {
+  settingsMuteButton.dataset.on = String(state.settings.mute);
+  settingsMuteButton.textContent = state.settings.mute ? "On" : "Off";
+
+  settingsMasterVolume.value = String(state.settings.masterVolume);
+  settingsMasterVolumeValue.textContent = String(state.settings.masterVolume);
+
+  settingsSfxVolume.value = String(state.settings.sfxVolume);
+  settingsSfxVolumeValue.textContent = String(state.settings.sfxVolume);
+}
+
+function loadPersistentState() {
+  const saved = safeReadSave();
+  if (!saved) {
+    applySettingsToUi();
+    return;
+  }
+
+  const s = saved.settings;
+  if (s && typeof s === "object") {
+    state.settings.mute = !!s.mute;
+    if (typeof s.masterVolume === "number") state.settings.masterVolume = clamp(Math.round(s.masterVolume), 0, 100);
+    if (typeof s.sfxVolume === "number") state.settings.sfxVolume = clamp(Math.round(s.sfxVolume), 0, 100);
+  }
+
+  const b = saved.bestRun;
+  if (b && typeof b === "object") {
+    if (typeof b.bestTimeSec === "number") state.bestRun.bestTimeSec = Math.max(0, b.bestTimeSec);
+    if (typeof b.bestLevel === "number") state.bestRun.bestLevel = Math.max(1, Math.floor(b.bestLevel));
+    if (typeof b.bestKills === "number") state.bestRun.bestKills = Math.max(0, Math.floor(b.bestKills));
+  }
+
+  applySettingsToUi();
+}
+
+function formatBestRunLine() {
+  return `Time ${formatClock(state.bestRun.bestTimeSec)} / Lv ${state.bestRun.bestLevel} / Kills ${state.bestRun.bestKills}`;
+}
+
+function updateBestRunStatsForCurrentRun() {
+  let changed = false;
+  if (state.elapsed > state.bestRun.bestTimeSec) {
+    state.bestRun.bestTimeSec = state.elapsed;
+    changed = true;
+  }
+  if (state.progression.level > state.bestRun.bestLevel) {
+    state.bestRun.bestLevel = state.progression.level;
+    changed = true;
+  }
+  if (state.kills > state.bestRun.bestKills) {
+    state.bestRun.bestKills = state.kills;
+    changed = true;
+  }
+  if (changed) savePersistentState();
+}
+
+function getStageProgress01() {
+  return clamp(state.elapsed / state.stage.durationSec, 0, 1);
+}
+
+function getDifficultyFactor() {
+  // Smooth early ramp, stronger later ramp.
+  const p = getStageProgress01();
+  return p * p * 0.55 + p * 0.45;
+}
+
+function isRunEnded() {
+  return state.gameOver || state.victory;
+}
+
+function isSimulationPaused() {
+  return isRunEnded() || state.paused || state.progression.levelUpActive;
+}
+
+function getXpForLevel(level) {
+  return WORLD_DATA.xp.levelBaseXp + (level - 1) * WORLD_DATA.xp.levelStepXp;
+}
+
+function getWeaponLevel(id) {
+  return state.progression.weaponLevels[id] || 0;
+}
+
+function getPassiveLevel(id) {
+  return state.progression.passiveLevels[id] || 0;
+}
+
+function getWeaponLevelData(id, level = getWeaponLevel(id)) {
+  const def = WEAPON_DEFS_BY_ID[id];
+  if (!def || level <= 0) return null;
+  return def.levels[level - 1] || null;
+}
+
+function getOwnedWeaponIds() {
+  return WORLD_DATA.weaponDefs
+    .map((def) => def.id)
+    .filter((id) => getWeaponLevel(id) > 0);
+}
+
+function getOwnedPassiveIds() {
+  return WORLD_DATA.passiveDefs
+    .map((def) => def.id)
+    .filter((id) => getPassiveLevel(id) > 0);
+}
+
+function formatOwnedList(ids, defsById, getLevelFn, emptyText = "None") {
+  if (ids.length === 0) return emptyText;
+  return ids.map((id) => `${defsById[id].label} Lv${getLevelFn(id)}`).join(" / ");
+}
+
 function updateHud() {
   hudHp.textContent = `HP ${state.player.hp}/${state.player.maxHp}`;
   hudEnemies.textContent = `Enemies ${state.enemies.length}`;
+  hudKills.textContent = `Kills ${state.kills}`;
+  hudLevel.textContent = `Lv ${state.progression.level}`;
+  hudTimer.textContent = formatClock(Math.max(0, state.stage.durationSec - state.elapsed));
+  hudOwnedWeapons.textContent = formatOwnedList(getOwnedWeaponIds(), WEAPON_DEFS_BY_ID, getWeaponLevel, "None");
+  hudOwnedPassives.textContent = formatOwnedList(getOwnedPassiveIds(), PASSIVE_DEFS_BY_ID, getPassiveLevel, "None");
+  hudBestRun.textContent = formatBestRunLine();
+  xpLabel.textContent = `XP ${state.progression.xp} / ${state.progression.xpToNext}`;
+  xpPickupLabel.textContent = `Pickup ${Math.round(state.progression.pickupRadius)}`;
+  xpBarFill.style.width = `${(state.progression.xpToNext > 0 ? (state.progression.xp / state.progression.xpToNext) : 0) * 100}%`;
 }
 
 function setGameOverOverlayVisible(visible) {
   gameOverOverlay.classList.toggle("visible", visible);
 }
 
+function showResultOverlay(title, copy) {
+  resultTitle.textContent = title;
+  gameOverCopy.textContent = copy;
+  setGameOverOverlayVisible(true);
+}
+
+function setLevelUpOverlayVisible(visible) {
+  levelUpOverlay.classList.toggle("visible", visible);
+}
+
+function fillLevelUpChoicesUI() {
+  levelUpTitle.textContent = `LEVEL UP  Lv ${state.progression.level}`;
+  for (let i = 0; i < levelUpChoiceButtons.length; i += 1) {
+    const button = levelUpChoiceButtons[i];
+    const choice = state.progression.choices[i];
+    const nameEl = button.querySelector(".levelup-name");
+    const descEl = button.querySelector(".levelup-desc");
+    if (!nameEl || !descEl) continue;
+    if (choice) {
+      nameEl.textContent = choice.label;
+      descEl.textContent = choice.desc;
+      button.disabled = false;
+    } else {
+      nameEl.textContent = "-";
+      descEl.textContent = "-";
+      button.disabled = true;
+    }
+  }
+}
+
+function ensureWeaponRuntime(id) {
+  if (!state.weaponRuntime[id]) {
+    state.weaponRuntime[id] = { cooldown: 0 };
+  }
+  return state.weaponRuntime[id];
+}
+
+function rebuildPassiveDerivedStats() {
+  state.weapon.globalDamageMul = 1;
+  state.weapon.globalHasteMul = 1;
+  state.weapon.globalProjectileSpeedMul = 1;
+  state.weapon.globalProjectileSizeMul = 1;
+  state.progression.pickupRadius = WORLD_DATA.xp.pickupBaseRadius;
+  state.progression.damageTakenMul = 1;
+
+  state.player.speed = WORLD_DATA.player.speed;
+  const prevMaxHp = state.player.maxHp;
+  state.player.maxHp = WORLD_DATA.player.maxHp;
+
+  for (const def of WORLD_DATA.passiveDefs) {
+    const level = getPassiveLevel(def.id);
+    for (let i = 0; i < level; i += 1) {
+      const lv = def.levels[i];
+      if (!lv) continue;
+      if (lv.damageMul) state.weapon.globalDamageMul *= lv.damageMul;
+      if (lv.hasteMul) state.weapon.globalHasteMul *= lv.hasteMul;
+      if (lv.moveSpeedMul) state.player.speed *= lv.moveSpeedMul;
+      if (lv.maxHpAdd) state.player.maxHp += lv.maxHpAdd;
+      if (lv.magnetAdd) state.progression.pickupRadius += lv.magnetAdd;
+      if (lv.projectileSpeedMul) state.weapon.globalProjectileSpeedMul *= lv.projectileSpeedMul;
+      if (lv.projectileSizeMul) state.weapon.globalProjectileSizeMul *= lv.projectileSizeMul;
+      if (lv.damageTakenMul) state.progression.damageTakenMul *= lv.damageTakenMul;
+    }
+  }
+
+  if (state.player.maxHp !== prevMaxHp) {
+    state.player.hp = Math.min(state.player.maxHp, state.player.hp);
+  }
+}
+
+function grantWeaponLevel(id) {
+  const def = WEAPON_DEFS_BY_ID[id];
+  if (!def) return;
+  const current = getWeaponLevel(id);
+  if (current >= def.maxLevel) return;
+  state.progression.weaponLevels[id] = current + 1;
+  ensureWeaponRuntime(id);
+}
+
+function grantPassiveLevel(id) {
+  const def = PASSIVE_DEFS_BY_ID[id];
+  if (!def) return;
+  const current = getPassiveLevel(id);
+  if (current >= def.maxLevel) return;
+  const nextLevelIndex = current;
+  state.progression.passiveLevels[id] = current + 1;
+  rebuildPassiveDerivedStats();
+  const lv = def.levels[nextLevelIndex];
+  if (lv?.heal) {
+    state.player.hp = Math.min(state.player.maxHp, state.player.hp + lv.heal);
+  }
+}
+
+function rollUpgradeChoices() {
+  const pool = [];
+
+  for (const def of WORLD_DATA.weaponDefs) {
+    const level = getWeaponLevel(def.id);
+    if (level >= def.maxLevel) continue;
+    const nextLevel = level + 1;
+    pool.push({
+      category: "weapon",
+      id: def.id,
+      label: level === 0 ? `Unlock ${def.label}` : `${def.label} Lv${nextLevel}`,
+      desc: level === 0 ? def.baseDesc : `Upgrade to Lv${nextLevel}`,
+    });
+  }
+
+  for (const def of WORLD_DATA.passiveDefs) {
+    const level = getPassiveLevel(def.id);
+    if (level >= def.maxLevel) continue;
+    const nextLevel = level + 1;
+    pool.push({
+      category: "passive",
+      id: def.id,
+      label: `${def.label} Lv${nextLevel}`,
+      desc: def.baseDesc,
+    });
+  }
+
+  const picks = [];
+  for (let i = 0; i < 3 && pool.length > 0; i += 1) {
+    const idx = Math.floor(Math.random() * pool.length);
+    picks.push(pool[idx]);
+    pool.splice(idx, 1);
+  }
+  state.progression.choices = picks;
+  fillLevelUpChoicesUI();
+  return picks.length;
+}
+
+function enterLevelUp() {
+  const count = rollUpgradeChoices();
+  if (count <= 0) {
+    state.progression.levelUpActive = false;
+    state.progression.choices = [];
+    setLevelUpOverlayVisible(false);
+    return;
+  }
+  state.progression.levelUpActive = true;
+  setLevelUpOverlayVisible(true);
+}
+
+function applyUpgrade(choice) {
+  if (!choice) return;
+  if (choice.category === "weapon") {
+    grantWeaponLevel(choice.id);
+    return;
+  }
+  if (choice.category === "passive") {
+    grantPassiveLevel(choice.id);
+  }
+}
+
+function chooseLevelUp(index) {
+  if (!state.progression.levelUpActive) return;
+  const choice = state.progression.choices[index];
+  if (!choice) return;
+  applyUpgrade(choice);
+  state.progression.levelUpActive = false;
+  state.progression.choices = [];
+  setLevelUpOverlayVisible(false);
+  updateHud();
+}
+
+function grantXp(amount) {
+  state.progression.xp += amount;
+  while (state.progression.xp >= state.progression.xpToNext) {
+    state.progression.xp -= state.progression.xpToNext;
+    state.progression.level += 1;
+    state.progression.xpToNext = getXpForLevel(state.progression.level);
+    if (!state.progression.levelUpActive) {
+      enterLevelUp();
+    }
+  }
+}
+
 function resetGame() {
   state.paused = false;
   state.gameOver = false;
+  state.victory = false;
   state.elapsed = 0;
   state.spawn.timer = WORLD_DATA.spawn.startDelaySec;
+  state.weapon.fireCooldown = 0;
+  state.weaponRuntime = {};
   state.enemies.length = 0;
+  state.projectiles.length = 0;
+  state.xpGems.length = 0;
   state.nextEnemyId = 1;
   state.nearestEnemyId = null;
+  state.kills = 0;
+  state.progression.level = 1;
+  state.progression.xp = 0;
+  state.progression.xpToNext = getXpForLevel(1);
+  state.progression.levelUpActive = false;
+  state.progression.choices = [];
+  state.progression.pickupRadius = WORLD_DATA.xp.pickupBaseRadius;
+  state.progression.weaponLevels = {};
+  state.progression.passiveLevels = {};
+  state.progression.damageTakenMul = 1;
   state.player.x = VIRTUAL_WIDTH * 0.5;
   state.player.y = VIRTUAL_HEIGHT * 0.5;
-  state.player.hp = state.player.maxHp;
+  state.player.speed = WORLD_DATA.player.speed;
+  state.player.maxHp = WORLD_DATA.player.maxHp;
+  state.player.hp = WORLD_DATA.player.maxHp;
   state.player.hitCooldown = 0;
   state.player.facingX = 1;
   state.player.facingY = 0;
+  state.weapon.globalDamageMul = 1;
+  state.weapon.globalHasteMul = 1;
+  state.weapon.globalProjectileSpeedMul = 1;
+  state.weapon.globalProjectileSizeMul = 1;
+
+  // Start with the basic weapon unlocked.
+  grantWeaponLevel(WORLD_DATA.weaponDefs[0].id);
+  rebuildPassiveDerivedStats();
+
+  input.touch.active = false;
+  input.touch.pointerId = null;
+  input.touch.nx = 0;
+  input.touch.ny = 0;
+  joystickEl.style.display = "none";
   setGameOverOverlayVisible(false);
+  setLevelUpOverlayVisible(false);
   updateHud();
 }
 
 function triggerGameOver() {
-  if (state.gameOver) return;
+  if (isRunEnded()) return;
   state.gameOver = true;
   state.paused = false;
-  setGameOverOverlayVisible(true);
-  gameOverCopy.textContent = `Survived ${state.elapsed.toFixed(1)}s  |  Enemies on field: ${state.enemies.length}`;
+  state.progression.levelUpActive = false;
+  setLevelUpOverlayVisible(false);
+  updateBestRunStatsForCurrentRun();
+  showResultOverlay(
+    "GAME OVER",
+    `Time ${formatClock(state.elapsed)}  |  Lv ${state.progression.level}  |  Kills ${state.kills}`,
+  );
+}
+
+function triggerVictory() {
+  if (isRunEnded()) return;
+  state.victory = true;
+  state.paused = false;
+  state.progression.levelUpActive = false;
+  setLevelUpOverlayVisible(false);
+  updateBestRunStatsForCurrentRun();
+  showResultOverlay(
+    "VICTORY",
+    `Time ${formatClock(state.stage.durationSec)}  |  Lv ${state.progression.level}  |  Kills ${state.kills}`,
+  );
 }
 
 function resize() {
@@ -150,9 +627,15 @@ function resize() {
 }
 
 function setKey(code, pressed) {
-  if (state.gameOver && pressed && (code === "KeyR" || code === "Enter" || code === "Space")) {
+  if (isRunEnded() && pressed && (code === "KeyR" || code === "Enter" || code === "Space")) {
     resetGame();
     return;
+  }
+  if (state.progression.levelUpActive && pressed) {
+    if (code === "Digit1") chooseLevelUp(0);
+    if (code === "Digit2") chooseLevelUp(1);
+    if (code === "Digit3") chooseLevelUp(2);
+    if (code.startsWith("Digit")) return;
   }
   switch (code) {
     case "KeyA":
@@ -172,7 +655,7 @@ function setKey(code, pressed) {
       input.keys.down = pressed;
       break;
     case "Escape":
-      if (pressed && !state.gameOver) state.paused = !state.paused;
+      if (pressed && !isRunEnded() && !state.progression.levelUpActive) state.paused = !state.paused;
       break;
     default:
       break;
@@ -180,7 +663,7 @@ function setKey(code, pressed) {
 }
 
 window.addEventListener("keydown", (event) => {
-  if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space", "Enter"].includes(event.code)) {
+  if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space", "Enter", "Digit1", "Digit2", "Digit3"].includes(event.code)) {
     event.preventDefault();
   }
   setKey(event.code, true);
@@ -238,7 +721,7 @@ function setTouchVector(clientX, clientY) {
 }
 
 touchLeft.addEventListener("pointerdown", (event) => {
-  if (state.gameOver) return;
+  if (state.gameOver || state.progression.levelUpActive) return;
   if (input.touch.active) return;
   input.touch.pointerId = event.pointerId;
   input.touch.active = true;
@@ -270,7 +753,7 @@ touchLeft.addEventListener("pointerup", endTouch);
 touchLeft.addEventListener("pointercancel", endTouch);
 
 function getMoveInput() {
-  if (state.gameOver) return { x: 0, y: 0 };
+  if (state.gameOver || state.progression.levelUpActive) return { x: 0, y: 0 };
   let x = 0;
   let y = 0;
   if (input.keys.left) x -= 1;
@@ -301,6 +784,10 @@ function getSpawnInterval() {
 function spawnEnemy() {
   if (state.enemies.length >= WORLD_DATA.spawn.maxEnemies) return;
 
+  const diff = getDifficultyFactor();
+  const hpScale = 1 + diff * (WORLD_DATA.stage.enemyHpScaleAtEnd - 1);
+  const speedScale = 1 + diff * (WORLD_DATA.stage.enemySpeedScaleAtEnd - 1);
+  const damageScale = 1 + diff * (WORLD_DATA.stage.enemyDamageScaleAtEnd - 1);
   const angle = Math.random() * Math.PI * 2;
   const distance = WORLD_DATA.spawn.minDistance + Math.random() * (WORLD_DATA.spawn.maxDistance - WORLD_DATA.spawn.minDistance);
   const enemy = {
@@ -308,8 +795,10 @@ function spawnEnemy() {
     x: clamp(state.player.x + Math.cos(angle) * distance, WORLD_DATA.enemy.radius, VIRTUAL_WIDTH - WORLD_DATA.enemy.radius),
     y: clamp(state.player.y + Math.sin(angle) * distance, WORLD_DATA.enemy.radius, VIRTUAL_HEIGHT - WORLD_DATA.enemy.radius),
     radius: WORLD_DATA.enemy.radius,
-    speed: WORLD_DATA.enemy.speed * (0.92 + Math.random() * 0.22),
-    damage: WORLD_DATA.enemy.contactDamage,
+    speed: WORLD_DATA.enemy.speed * speedScale * (0.92 + Math.random() * 0.22),
+    hp: Math.max(1, Math.round(WORLD_DATA.enemy.maxHp * hpScale)),
+    maxHp: Math.max(1, Math.round(WORLD_DATA.enemy.maxHp * hpScale)),
+    damage: Math.max(1, Math.round(WORLD_DATA.enemy.contactDamage * damageScale)),
     color: WORLD_DATA.enemy.color,
   };
 
@@ -332,7 +821,7 @@ function spawnEnemy() {
 }
 
 function updateSpawnSystem(dt) {
-  if (state.gameOver || state.paused) return;
+  if (isSimulationPaused()) return;
   state.spawn.timer -= dt;
 
   const interval = getSpawnInterval();
@@ -345,7 +834,7 @@ function updateSpawnSystem(dt) {
 }
 
 function updateMovementSystem(dt) {
-  if (state.gameOver || state.paused) return;
+  if (isSimulationPaused()) return;
 
   state.elapsed += dt;
   const move = getMoveInput();
@@ -371,17 +860,18 @@ function updateMovementSystem(dt) {
 }
 
 function updateCombatSystem(dt) {
+  if (isSimulationPaused()) return;
+
   if (state.player.hitCooldown > 0) {
     state.player.hitCooldown = Math.max(0, state.player.hitCooldown - dt);
   }
-
-  if (state.gameOver || state.paused) return;
 
   for (const enemy of state.enemies) {
     if (!circlesOverlap(state.player, enemy)) continue;
     if (state.player.hitCooldown > 0) break;
 
-    state.player.hp = Math.max(0, state.player.hp - enemy.damage);
+    const dealt = Math.max(1, Math.round(enemy.damage * state.progression.damageTakenMul));
+    state.player.hp = Math.max(0, state.player.hp - dealt);
     state.player.hitCooldown = WORLD_DATA.player.hitInvulnerabilitySec;
     if (state.player.hp <= 0) {
       triggerGameOver();
@@ -405,9 +895,225 @@ function updateTargetingSystem() {
   state.nearestEnemyId = best ? best.id : null;
 }
 
+function spawnXpGem(x, y, value = WORLD_DATA.xp.gemValue) {
+  state.xpGems.push({
+    x,
+    y,
+    radius: WORLD_DATA.xp.gemRadius,
+    value,
+    color: WORLD_DATA.xp.gemColor,
+  });
+}
+
+function getNearestEnemy() {
+  if (state.nearestEnemyId == null) return null;
+  for (const enemy of state.enemies) {
+    if (enemy.id === state.nearestEnemyId) return enemy;
+  }
+  return null;
+}
+
+function getEffectiveShotStats(levelData) {
+  return {
+    damage: levelData.damage * state.weapon.globalDamageMul,
+    speed: levelData.speed * state.weapon.globalProjectileSpeedMul,
+    radius: levelData.size * state.weapon.globalProjectileSizeMul,
+    life: levelData.life,
+    color: levelData.color,
+  };
+}
+
+function spawnProjectileAtAngle(angle, shotStats, spawnDistance = null, originX = state.player.x, originY = state.player.y) {
+  const distanceFromOrigin = spawnDistance ?? (state.player.radius + shotStats.radius + 2);
+  const nx = Math.cos(angle);
+  const ny = Math.sin(angle);
+  state.projectiles.push({
+    x: originX + nx * distanceFromOrigin,
+    y: originY + ny * distanceFromOrigin,
+    vx: nx * shotStats.speed,
+    vy: ny * shotStats.speed,
+    radius: shotStats.radius,
+    damage: shotStats.damage,
+    life: shotStats.life,
+    color: shotStats.color,
+  });
+  if (state.projectiles.length > 700) {
+    state.projectiles.splice(0, state.projectiles.length - 700);
+  }
+}
+
+function aimAtTarget(target) {
+  if (!target) return null;
+  const dx = target.x - state.player.x;
+  const dy = target.y - state.player.y;
+  const len = Math.hypot(dx, dy);
+  if (len <= 0.0001) return null;
+  const angle = Math.atan2(dy, dx);
+  state.player.facingX = dx / len;
+  state.player.facingY = dy / len;
+  return { angle, dx, dy, len };
+}
+
+function fireWeapon(def, levelData, runtime, target) {
+  const shot = getEffectiveShotStats(levelData);
+  const aimed = aimAtTarget(target);
+
+  switch (def.kind) {
+    case "target_single":
+    case "heavy_single": {
+      if (!aimed) return false;
+      spawnProjectileAtAngle(aimed.angle, shot);
+      return true;
+    }
+    case "target_dual": {
+      if (!aimed) return false;
+      const lane = levelData.laneOffset ?? 10;
+      const px = -Math.sin(aimed.angle);
+      const py = Math.cos(aimed.angle);
+      const spawnDist = state.player.radius + shot.radius + 2;
+      spawnProjectileAtAngle(
+        aimed.angle,
+        shot,
+        spawnDist,
+        state.player.x + px * lane,
+        state.player.y + py * lane,
+      );
+      spawnProjectileAtAngle(
+        aimed.angle,
+        shot,
+        spawnDist,
+        state.player.x - px * lane,
+        state.player.y - py * lane,
+      );
+      return true;
+    }
+    case "target_spread": {
+      if (!aimed) return false;
+      const shots = levelData.shots ?? 3;
+      const spreadRad = ((levelData.spreadDeg ?? 20) * Math.PI) / 180;
+      const step = shots > 1 ? spreadRad / (shots - 1) : 0;
+      const start = aimed.angle - spreadRad * 0.5;
+      for (let i = 0; i < shots; i += 1) {
+        spawnProjectileAtAngle(start + step * i, shot);
+      }
+      return true;
+    }
+    case "radial_burst": {
+      const shots = levelData.shots ?? 8;
+      const start = (runtime.spinOffset || 0) % (Math.PI * 2);
+      const step = (Math.PI * 2) / shots;
+      for (let i = 0; i < shots; i += 1) {
+        spawnProjectileAtAngle(start + i * step, shot);
+      }
+      runtime.spinOffset = start + 0.19;
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
+function updateWeaponSystem(dt) {
+  if (isSimulationPaused()) return;
+
+  const target = getNearestEnemy();
+  const ownedIds = getOwnedWeaponIds();
+  for (const id of ownedIds) {
+    const def = WEAPON_DEFS_BY_ID[id];
+    const level = getWeaponLevel(id);
+    const levelData = getWeaponLevelData(id, level);
+    if (!def || !levelData) continue;
+
+    const runtime = ensureWeaponRuntime(id);
+    if (runtime.cooldown > 0) {
+      runtime.cooldown = Math.max(0, runtime.cooldown - dt);
+    }
+    if (runtime.cooldown > 0) continue;
+
+    const fired = fireWeapon(def, levelData, runtime, target);
+    if (!fired) continue;
+
+    const interval = (levelData.interval || 1) / Math.max(0.2, state.weapon.globalHasteMul);
+    runtime.cooldown = Math.max(0.05, interval);
+  }
+}
+
+function updateProjectileSystem(dt) {
+  if (isSimulationPaused()) return;
+
+  for (let i = state.projectiles.length - 1; i >= 0; i -= 1) {
+    const proj = state.projectiles[i];
+    proj.x += proj.vx * dt;
+    proj.y += proj.vy * dt;
+    proj.life -= dt;
+
+    const outOfBounds =
+      proj.x < -40 || proj.y < -40 || proj.x > VIRTUAL_WIDTH + 40 || proj.y > VIRTUAL_HEIGHT + 40;
+    if (proj.life <= 0 || outOfBounds) {
+      state.projectiles.splice(i, 1);
+      continue;
+    }
+
+    let hit = false;
+    for (let j = state.enemies.length - 1; j >= 0; j -= 1) {
+      const enemy = state.enemies[j];
+      if (!circlesOverlap(proj, enemy)) continue;
+
+      enemy.hp -= proj.damage;
+      hit = true;
+      if (enemy.hp <= 0) {
+        spawnXpGem(enemy.x, enemy.y, WORLD_DATA.xp.gemValue);
+        state.enemies.splice(j, 1);
+        state.kills += 1;
+      }
+      break;
+    }
+
+    if (hit) {
+      state.projectiles.splice(i, 1);
+    }
+  }
+}
+
+function updateXpSystem(dt) {
+  if (isSimulationPaused()) return;
+
+  const collectRadius = state.player.radius + state.progression.pickupRadius;
+  const attractRadius = collectRadius + WORLD_DATA.xp.pickupAttractRadius;
+
+  for (let i = state.xpGems.length - 1; i >= 0; i -= 1) {
+    const gem = state.xpGems[i];
+    const dx = state.player.x - gem.x;
+    const dy = state.player.y - gem.y;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist <= collectRadius + gem.radius) {
+      grantXp(gem.value);
+      state.xpGems.splice(i, 1);
+      continue;
+    }
+
+    if (dist <= attractRadius && dist > 0.0001) {
+      const speed = WORLD_DATA.xp.pickupSpeed + (1 - Math.min(1, dist / attractRadius)) * 260;
+      gem.x += (dx / dist) * speed * dt;
+      gem.y += (dy / dist) * speed * dt;
+    }
+  }
+}
+
 function update(dt) {
   updateSpawnSystem(dt);
   updateMovementSystem(dt);
+  if (!isRunEnded() && state.elapsed >= state.stage.durationSec) {
+    state.elapsed = state.stage.durationSec;
+    triggerVictory();
+    updateHud();
+    return;
+  }
+  updateTargetingSystem();
+  updateWeaponSystem(dt);
+  updateProjectileSystem(dt);
+  updateXpSystem(dt);
   updateCombatSystem(dt);
   updateTargetingSystem();
   updateHud();
@@ -477,6 +1183,16 @@ function drawEnemies() {
     ctx.beginPath();
     ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
     ctx.fill();
+
+    const hpRatio = enemy.hp / enemy.maxHp;
+    const barW = 24;
+    const barH = 4;
+    const bx = enemy.x - barW / 2;
+    const by = enemy.y - enemy.radius - 10;
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillRect(bx, by, barW, barH);
+    ctx.fillStyle = hpRatio > 0.5 ? "#ffd56b" : "#ff9ba8";
+    ctx.fillRect(bx, by, barW * hpRatio, barH);
   }
 
   if (!targetEnemy) return;
@@ -492,6 +1208,30 @@ function drawEnemies() {
   ctx.moveTo(state.player.x, state.player.y);
   ctx.lineTo(targetEnemy.x, targetEnemy.y);
   ctx.stroke();
+}
+
+function drawProjectiles() {
+  for (const proj of state.projectiles) {
+    ctx.fillStyle = proj.color;
+    ctx.beginPath();
+    ctx.arc(proj.x, proj.y, proj.radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawXpGems() {
+  for (const gem of state.xpGems) {
+    ctx.fillStyle = gem.color;
+    ctx.beginPath();
+    ctx.arc(gem.x, gem.y, gem.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(gem.x, gem.y, gem.radius + 1.5, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 }
 
 function drawPlayerHpBar() {
@@ -522,8 +1262,18 @@ function render() {
 
   drawGrid();
   drawEnemies();
+  drawProjectiles();
+  drawXpGems();
   drawPlayer();
   drawPlayerHpBar();
+
+  if (!state.gameOver) {
+    ctx.strokeStyle = "rgba(99,192,255,0.16)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(state.player.x, state.player.y, state.player.radius + state.progression.pickupRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 
   if (state.paused) {
     ctx.fillStyle = "rgba(0,0,0,0.35)";
@@ -537,6 +1287,16 @@ function render() {
 
   if (state.gameOver) {
     ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+  }
+
+  if (state.victory) {
+    ctx.fillStyle = "rgba(99, 240, 178, 0.09)";
+    ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+  }
+
+  if (state.progression.levelUpActive) {
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
     ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
   }
 }
@@ -563,5 +1323,31 @@ restartButton.addEventListener("click", () => {
   resetGame();
 });
 
+settingsMuteButton.addEventListener("click", () => {
+  state.settings.mute = !state.settings.mute;
+  applySettingsToUi();
+  savePersistentState();
+});
+
+settingsMasterVolume.addEventListener("input", () => {
+  state.settings.masterVolume = clamp(Number(settingsMasterVolume.value) || 0, 0, 100);
+  settingsMasterVolumeValue.textContent = String(state.settings.masterVolume);
+  savePersistentState();
+});
+
+settingsSfxVolume.addEventListener("input", () => {
+  state.settings.sfxVolume = clamp(Number(settingsSfxVolume.value) || 0, 0, 100);
+  settingsSfxVolumeValue.textContent = String(state.settings.sfxVolume);
+  savePersistentState();
+});
+
+for (const button of levelUpChoiceButtons) {
+  button.addEventListener("click", () => {
+    const index = Number(button.dataset.upgradeIndex);
+    if (Number.isFinite(index)) chooseLevelUp(index);
+  });
+}
+
+loadPersistentState();
 resetGame();
 requestAnimationFrame(frame);
