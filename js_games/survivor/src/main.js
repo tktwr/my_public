@@ -19,6 +19,7 @@ const hudOwnedWeapons = document.getElementById("hud-owned-weapons");
 const hudOwnedPassives = document.getElementById("hud-owned-passives");
 const hudBestRun = document.getElementById("hud-best-run");
 const pauseButton = document.getElementById("pause-button");
+const settingsButton = document.getElementById("settings-button");
 const touchLeft = document.getElementById("touch-left");
 const joystickEl = document.getElementById("joystick");
 const xpLabel = document.getElementById("xp-label");
@@ -31,6 +32,8 @@ const gameOverOverlay = document.getElementById("game-over-overlay");
 const resultTitle = document.getElementById("result-title");
 const gameOverCopy = document.getElementById("game-over-copy");
 const restartButton = document.getElementById("restart-button");
+const settingsOverlay = document.getElementById("settings-overlay");
+const settingsCloseButton = document.getElementById("settings-close-button");
 const settingsMuteButton = document.getElementById("settings-mute");
 const settingsMasterVolume = document.getElementById("settings-master-volume");
 const settingsMasterVolumeValue = document.getElementById("settings-master-volume-value");
@@ -49,6 +52,7 @@ if (
   !hudOwnedPassives ||
   !hudBestRun ||
   !pauseButton ||
+  !settingsButton ||
   !touchLeft ||
   !joystickEl ||
   !xpLabel ||
@@ -61,6 +65,8 @@ if (
   !resultTitle ||
   !gameOverCopy ||
   !restartButton ||
+  !settingsOverlay ||
+  !settingsCloseButton ||
   !settingsMuteButton ||
   !settingsMasterVolume ||
   !settingsMasterVolumeValue ||
@@ -159,6 +165,10 @@ const state = {
     bestTimeSec: 0,
     bestLevel: 1,
     bestKills: 0,
+  },
+  ui: {
+    settingsOpen: false,
+    settingsResumePaused: false,
   },
 };
 
@@ -289,8 +299,40 @@ function isRunEnded() {
   return state.gameOver || state.victory;
 }
 
+function setSettingsOverlayVisible(visible) {
+  state.ui.settingsOpen = !!visible;
+  settingsOverlay.classList.toggle("visible", !!visible);
+  settingsOverlay.setAttribute("aria-hidden", visible ? "false" : "true");
+}
+
+function openSettings() {
+  if (state.ui.settingsOpen) return;
+  state.ui.settingsResumePaused = state.paused;
+  setPaused(true);
+  setSettingsOverlayVisible(true);
+  applySettingsToUi();
+  updateHud();
+}
+
+function closeSettings() {
+  if (!state.ui.settingsOpen) return;
+  setSettingsOverlayVisible(false);
+  if (!isRunEnded() && !state.progression.levelUpActive) {
+    setPaused(state.ui.settingsResumePaused);
+  }
+  updateHud();
+}
+
+function toggleSettings() {
+  if (state.ui.settingsOpen) {
+    closeSettings();
+  } else {
+    openSettings();
+  }
+}
+
 function canTogglePause() {
-  return !isRunEnded() && !state.progression.levelUpActive;
+  return !isRunEnded() && !state.progression.levelUpActive && !state.ui.settingsOpen;
 }
 
 function setPaused(nextPaused) {
@@ -304,7 +346,7 @@ function togglePause() {
 }
 
 function isSimulationPaused() {
-  return isRunEnded() || state.paused || state.progression.levelUpActive;
+  return isRunEnded() || state.paused || state.progression.levelUpActive || state.ui.settingsOpen;
 }
 
 function getXpForLevel(level) {
@@ -353,6 +395,8 @@ function updateHud() {
   hudBestRun.textContent = formatBestRunLine();
   pauseButton.dataset.paused = String(state.paused);
   pauseButton.textContent = state.paused ? "Resume" : "Pause";
+  settingsButton.dataset.open = String(state.ui.settingsOpen);
+  settingsButton.textContent = state.ui.settingsOpen ? "Close Settings" : "Settings";
   xpLabel.textContent = `XP ${state.progression.xp} / ${state.progression.xpToNext}`;
   xpPickupLabel.textContent = `Pickup ${Math.round(state.progression.pickupRadius)}`;
   xpBarFill.style.width = `${(state.progression.xpToNext > 0 ? (state.progression.xp / state.progression.xpToNext) : 0) * 100}%`;
@@ -543,6 +587,8 @@ function resetGame() {
   state.paused = false;
   state.gameOver = false;
   state.victory = false;
+  state.ui.settingsOpen = false;
+  state.ui.settingsResumePaused = false;
   state.elapsed = 0;
   state.spawn.timer = WORLD_DATA.spawn.startDelaySec;
   state.weapon.fireCooldown = 0;
@@ -586,11 +632,13 @@ function resetGame() {
   joystickEl.style.display = "none";
   setGameOverOverlayVisible(false);
   setLevelUpOverlayVisible(false);
+  setSettingsOverlayVisible(false);
   updateHud();
 }
 
 function triggerGameOver() {
   if (isRunEnded()) return;
+  closeSettings();
   state.gameOver = true;
   state.paused = false;
   state.progression.levelUpActive = false;
@@ -604,6 +652,7 @@ function triggerGameOver() {
 
 function triggerVictory() {
   if (isRunEnded()) return;
+  closeSettings();
   state.victory = true;
   state.paused = false;
   state.progression.levelUpActive = false;
@@ -673,7 +722,13 @@ function setKey(code, pressed) {
       input.keys.down = pressed;
       break;
     case "Escape":
-      if (pressed) togglePause();
+      if (pressed) {
+        if (state.ui.settingsOpen) {
+          closeSettings();
+        } else {
+          togglePause();
+        }
+      }
       break;
     default:
       break;
@@ -1343,6 +1398,20 @@ restartButton.addEventListener("click", () => {
 
 pauseButton.addEventListener("click", () => {
   togglePause();
+});
+
+settingsButton.addEventListener("click", () => {
+  toggleSettings();
+});
+
+settingsCloseButton.addEventListener("click", () => {
+  closeSettings();
+});
+
+settingsOverlay.addEventListener("click", (event) => {
+  if (event.target === settingsOverlay) {
+    closeSettings();
+  }
 });
 
 settingsMuteButton.addEventListener("click", () => {

@@ -105,6 +105,11 @@
       background: rgba(255, 213, 107, 0.12);
     }
 
+    .hud-button[data-open="true"] {
+      border-color: rgba(99, 192, 255, 0.45);
+      background: rgba(99, 192, 255, 0.12);
+    }
+
     #hud-left,
     #hud-right {
       display: flex;
@@ -325,6 +330,62 @@
       color: #dfffee;
     }
 
+    #settings-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 45;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(4, 8, 16, 0.4);
+      backdrop-filter: blur(4px);
+      pointer-events: auto;
+    }
+
+    #settings-overlay.visible {
+      display: flex;
+    }
+
+    .settings-modal {
+      width: min(94vw, 460px);
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(10, 16, 28, 0.94);
+      box-shadow: 0 14px 45px rgba(0,0,0,0.35);
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .settings-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .settings-modal-title {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0.04em;
+    }
+
+    .settings-close {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.04);
+      color: inherit;
+      font: inherit;
+      border-radius: 999px;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
+    .settings-modal .loadout-row {
+      background: rgba(255,255,255,0.03);
+    }
+
     .loadout-label {
       color: rgba(215, 228, 255, 0.75);
       margin-right: 6px;
@@ -458,6 +519,7 @@
         </div>
         <div id="hud-right">
           <button type="button" id="pause-button" class="hud-button" data-paused="false">Pause</button>
+          <button type="button" id="settings-button" class="hud-button" data-open="false">Settings</button>
           <div class="chip">Move: WASD / Arrows / Left Stick</div>
         </div>
       </div>
@@ -467,21 +529,29 @@
         <div class="loadout-row"><span class="loadout-label">Weapons</span><span class="loadout-value" id="hud-owned-weapons">Bolt Wand Lv1</span></div>
         <div class="loadout-row"><span class="loadout-label">Passives</span><span class="loadout-value" id="hud-owned-passives">None</span></div>
         <div class="loadout-row"><span class="loadout-label">Best</span><span class="loadout-value" id="hud-best-run">Time 00:00 / Lv 1 / Kills 0</span></div>
-        <div class="loadout-row controls">
-          <div class="settings-grid">
-            <div class="toggle-row">
-              <span class="loadout-label">Mute</span>
-              <button type="button" class="toggle-btn" id="settings-mute" data-on="false">Off</button>
-            </div>
-            <div class="settings-line">
-              <label for="settings-master-volume">Master</label>
-              <input id="settings-master-volume" type="range" min="0" max="100" step="1" value="80">
-              <output id="settings-master-volume-value" for="settings-master-volume">80</output>
-            </div>
-            <div class="settings-line">
-              <label for="settings-sfx-volume">SFX</label>
-              <input id="settings-sfx-volume" type="range" min="0" max="100" step="1" value="80">
-              <output id="settings-sfx-volume-value" for="settings-sfx-volume">80</output>
+      </div>
+      <div id="settings-overlay" aria-live="polite" aria-hidden="true">
+        <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+          <div class="settings-modal-header">
+            <h2 class="settings-modal-title" id="settings-modal-title">Settings</h2>
+            <button type="button" class="settings-close" id="settings-close-button">Close</button>
+          </div>
+          <div class="loadout-row controls">
+            <div class="settings-grid">
+              <div class="toggle-row">
+                <span class="loadout-label">Mute</span>
+                <button type="button" class="toggle-btn" id="settings-mute" data-on="false">Off</button>
+              </div>
+              <div class="settings-line">
+                <label for="settings-master-volume">Master</label>
+                <input id="settings-master-volume" type="range" min="0" max="100" step="1" value="80">
+                <output id="settings-master-volume-value" for="settings-master-volume">80</output>
+              </div>
+              <div class="settings-line">
+                <label for="settings-sfx-volume">SFX</label>
+                <input id="settings-sfx-volume" type="range" min="0" max="100" step="1" value="80">
+                <output id="settings-sfx-volume-value" for="settings-sfx-volume">80</output>
+              </div>
             </div>
           </div>
         </div>
