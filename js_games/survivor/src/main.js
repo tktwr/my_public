@@ -1341,6 +1341,10 @@ restartButton.addEventListener("click", () => {
   resetGame();
 });
 
+pauseButton.addEventListener("click", () => {
+  togglePause();
+});
+
 settingsMuteButton.addEventListener("click", () => {
   state.settings.mute = !state.settings.mute;
   applySettingsToUi();
