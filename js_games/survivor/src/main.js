@@ -1,5 +1,7 @@
-const VIRTUAL_WIDTH = 1280;
-const VIRTUAL_HEIGHT = 1280;
+import { WORLD_DATA } from "./world/data.js";
+
+const VIRTUAL_WIDTH = WORLD_DATA.virtualResolution.width;
+const VIRTUAL_HEIGHT = WORLD_DATA.virtualResolution.height;
 const BG_COLOR = "#08101d";
 const GRID_COLOR = "rgba(255,255,255,0.06)";
 const GRID_BOLD_COLOR = "rgba(255,255,255,0.12)";
@@ -8,10 +10,15 @@ const shell = document.getElementById("game-shell");
 const canvas = document.getElementById("game-canvas");
 const ctx = canvas.getContext("2d");
 const hudRes = document.getElementById("hud-res");
+const hudHp = document.getElementById("hud-hp");
+const hudEnemies = document.getElementById("hud-enemies");
 const touchLeft = document.getElementById("touch-left");
 const joystickEl = document.getElementById("joystick");
+const gameOverOverlay = document.getElementById("game-over-overlay");
+const gameOverCopy = document.getElementById("game-over-copy");
+const restartButton = document.getElementById("restart-button");
 
-if (!ctx) {
+if (!ctx || !hudRes || !hudHp || !hudEnemies || !touchLeft || !joystickEl || !gameOverOverlay || !gameOverCopy || !restartButton) {
   throw new Error("Canvas2D context is not available.");
 }
 
@@ -46,17 +53,71 @@ const input = {
 
 const state = {
   paused: false,
+  gameOver: false,
   elapsed: 0,
   player: {
     x: VIRTUAL_WIDTH * 0.5,
     y: VIRTUAL_HEIGHT * 0.5,
-    radius: 18,
-    speed: 320,
+    radius: WORLD_DATA.player.radius,
+    speed: WORLD_DATA.player.speed,
+    hp: WORLD_DATA.player.maxHp,
+    maxHp: WORLD_DATA.player.maxHp,
+    hitCooldown: 0,
+    facingX: 1,
+    facingY: 0,
   },
+  spawn: {
+    timer: WORLD_DATA.spawn.startDelaySec,
+  },
+  enemies: [],
+  nextEnemyId: 1,
+  nearestEnemyId: null,
 };
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function circlesOverlap(a, b) {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  const radius = a.radius + b.radius;
+  return dx * dx + dy * dy <= radius * radius;
+}
+
+function updateHud() {
+  hudHp.textContent = `HP ${state.player.hp}/${state.player.maxHp}`;
+  hudEnemies.textContent = `Enemies ${state.enemies.length}`;
+}
+
+function setGameOverOverlayVisible(visible) {
+  gameOverOverlay.classList.toggle("visible", visible);
+}
+
+function resetGame() {
+  state.paused = false;
+  state.gameOver = false;
+  state.elapsed = 0;
+  state.spawn.timer = WORLD_DATA.spawn.startDelaySec;
+  state.enemies.length = 0;
+  state.nextEnemyId = 1;
+  state.nearestEnemyId = null;
+  state.player.x = VIRTUAL_WIDTH * 0.5;
+  state.player.y = VIRTUAL_HEIGHT * 0.5;
+  state.player.hp = state.player.maxHp;
+  state.player.hitCooldown = 0;
+  state.player.facingX = 1;
+  state.player.facingY = 0;
+  setGameOverOverlayVisible(false);
+  updateHud();
+}
+
+function triggerGameOver() {
+  if (state.gameOver) return;
+  state.gameOver = true;
+  state.paused = false;
+  setGameOverOverlayVisible(true);
+  gameOverCopy.textContent = `Survived ${state.elapsed.toFixed(1)}s  |  Enemies on field: ${state.enemies.length}`;
 }
 
 function resize() {
@@ -89,6 +150,10 @@ function resize() {
 }
 
 function setKey(code, pressed) {
+  if (state.gameOver && pressed && (code === "KeyR" || code === "Enter" || code === "Space")) {
+    resetGame();
+    return;
+  }
   switch (code) {
     case "KeyA":
     case "ArrowLeft":
@@ -107,7 +172,7 @@ function setKey(code, pressed) {
       input.keys.down = pressed;
       break;
     case "Escape":
-      if (pressed) state.paused = !state.paused;
+      if (pressed && !state.gameOver) state.paused = !state.paused;
       break;
     default:
       break;
@@ -115,7 +180,7 @@ function setKey(code, pressed) {
 }
 
 window.addEventListener("keydown", (event) => {
-  if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space"].includes(event.code)) {
+  if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space", "Enter"].includes(event.code)) {
     event.preventDefault();
   }
   setKey(event.code, true);
@@ -173,6 +238,7 @@ function setTouchVector(clientX, clientY) {
 }
 
 touchLeft.addEventListener("pointerdown", (event) => {
+  if (state.gameOver) return;
   if (input.touch.active) return;
   input.touch.pointerId = event.pointerId;
   input.touch.active = true;
@@ -204,6 +270,7 @@ touchLeft.addEventListener("pointerup", endTouch);
 touchLeft.addEventListener("pointercancel", endTouch);
 
 function getMoveInput() {
+  if (state.gameOver) return { x: 0, y: 0 };
   let x = 0;
   let y = 0;
   if (input.keys.left) x -= 1;
@@ -222,16 +289,128 @@ function getMoveInput() {
   return { x, y };
 }
 
-function update(dt) {
-  if (state.paused) return;
+function getSpawnInterval() {
+  const s = WORLD_DATA.spawn;
+  return clamp(
+    s.baseIntervalSec - state.elapsed * s.accelerationPerSec,
+    s.minIntervalSec,
+    s.baseIntervalSec,
+  );
+}
+
+function spawnEnemy() {
+  if (state.enemies.length >= WORLD_DATA.spawn.maxEnemies) return;
+
+  const angle = Math.random() * Math.PI * 2;
+  const distance = WORLD_DATA.spawn.minDistance + Math.random() * (WORLD_DATA.spawn.maxDistance - WORLD_DATA.spawn.minDistance);
+  const enemy = {
+    id: state.nextEnemyId++,
+    x: clamp(state.player.x + Math.cos(angle) * distance, WORLD_DATA.enemy.radius, VIRTUAL_WIDTH - WORLD_DATA.enemy.radius),
+    y: clamp(state.player.y + Math.sin(angle) * distance, WORLD_DATA.enemy.radius, VIRTUAL_HEIGHT - WORLD_DATA.enemy.radius),
+    radius: WORLD_DATA.enemy.radius,
+    speed: WORLD_DATA.enemy.speed * (0.92 + Math.random() * 0.22),
+    damage: WORLD_DATA.enemy.contactDamage,
+    color: WORLD_DATA.enemy.color,
+  };
+
+  // Ensure the spawn stays meaningfully away from the player after edge clamping.
+  const dx = enemy.x - state.player.x;
+  const dy = enemy.y - state.player.y;
+  const minGap = 150;
+  const len = Math.hypot(dx, dy);
+  if (len < minGap) {
+    if (len > 0) {
+      const ratio = minGap / len;
+      enemy.x = clamp(state.player.x + dx * ratio, enemy.radius, VIRTUAL_WIDTH - enemy.radius);
+      enemy.y = clamp(state.player.y + dy * ratio, enemy.radius, VIRTUAL_HEIGHT - enemy.radius);
+    } else {
+      enemy.x = clamp(state.player.x + minGap, enemy.radius, VIRTUAL_WIDTH - enemy.radius);
+    }
+  }
+
+  state.enemies.push(enemy);
+}
+
+function updateSpawnSystem(dt) {
+  if (state.gameOver || state.paused) return;
+  state.spawn.timer -= dt;
+
+  const interval = getSpawnInterval();
+  let spawnGuard = 0;
+  while (state.spawn.timer <= 0 && spawnGuard < 8) {
+    spawnEnemy();
+    state.spawn.timer += interval;
+    spawnGuard += 1;
+  }
+}
+
+function updateMovementSystem(dt) {
+  if (state.gameOver || state.paused) return;
 
   state.elapsed += dt;
   const move = getMoveInput();
+  if (move.x !== 0 || move.y !== 0) {
+    state.player.facingX = move.x;
+    state.player.facingY = move.y;
+  }
   state.player.x += move.x * state.player.speed * dt;
   state.player.y += move.y * state.player.speed * dt;
 
   state.player.x = clamp(state.player.x, state.player.radius, VIRTUAL_WIDTH - state.player.radius);
   state.player.y = clamp(state.player.y, state.player.radius, VIRTUAL_HEIGHT - state.player.radius);
+
+  for (const enemy of state.enemies) {
+    const dx = state.player.x - enemy.x;
+    const dy = state.player.y - enemy.y;
+    const len = Math.hypot(dx, dy);
+    if (len > 0.0001) {
+      enemy.x += (dx / len) * enemy.speed * dt;
+      enemy.y += (dy / len) * enemy.speed * dt;
+    }
+  }
+}
+
+function updateCombatSystem(dt) {
+  if (state.player.hitCooldown > 0) {
+    state.player.hitCooldown = Math.max(0, state.player.hitCooldown - dt);
+  }
+
+  if (state.gameOver || state.paused) return;
+
+  for (const enemy of state.enemies) {
+    if (!circlesOverlap(state.player, enemy)) continue;
+    if (state.player.hitCooldown > 0) break;
+
+    state.player.hp = Math.max(0, state.player.hp - enemy.damage);
+    state.player.hitCooldown = WORLD_DATA.player.hitInvulnerabilitySec;
+    if (state.player.hp <= 0) {
+      triggerGameOver();
+    }
+    break;
+  }
+}
+
+function updateTargetingSystem() {
+  let best = null;
+  let bestDistSq = Infinity;
+  for (const enemy of state.enemies) {
+    const dx = enemy.x - state.player.x;
+    const dy = enemy.y - state.player.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < bestDistSq) {
+      bestDistSq = d2;
+      best = enemy;
+    }
+  }
+  state.nearestEnemyId = best ? best.id : null;
+}
+
+function update(dt) {
+  updateSpawnSystem(dt);
+  updateMovementSystem(dt);
+  updateCombatSystem(dt);
+  updateTargetingSystem();
+  updateHud();
 }
 
 function drawGrid() {
@@ -262,18 +441,73 @@ function drawGrid() {
 
 function drawPlayer() {
   const p = state.player;
+  const hurtFlash = state.player.hitCooldown > 0 && Math.floor(state.player.hitCooldown * 18) % 2 === 0;
 
-  ctx.fillStyle = "#63f0b2";
+  ctx.fillStyle = hurtFlash ? "#ffb4be" : "#63f0b2";
   ctx.beginPath();
   ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
   ctx.fill();
 
+  const aimLen = p.radius + 12;
+  const facingLen = Math.hypot(p.facingX, p.facingY) || 1;
   ctx.strokeStyle = "rgba(255,255,255,0.7)";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(p.x, p.y);
-  ctx.lineTo(p.x + p.radius + 10, p.y);
+  ctx.lineTo(
+    p.x + (p.facingX / facingLen) * aimLen,
+    p.y + (p.facingY / facingLen) * aimLen,
+  );
   ctx.stroke();
+
+  if (state.player.hitCooldown > 0) {
+    ctx.strokeStyle = "rgba(255, 180, 190, 0.7)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius + 6, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+function drawEnemies() {
+  let targetEnemy = null;
+  for (const enemy of state.enemies) {
+    if (enemy.id === state.nearestEnemyId) targetEnemy = enemy;
+    ctx.fillStyle = enemy.color;
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (!targetEnemy) return;
+
+  ctx.strokeStyle = "rgba(255, 213, 107, 0.85)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(targetEnemy.x, targetEnemy.y, targetEnemy.radius + 7, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(255, 213, 107, 0.35)";
+  ctx.beginPath();
+  ctx.moveTo(state.player.x, state.player.y);
+  ctx.lineTo(targetEnemy.x, targetEnemy.y);
+  ctx.stroke();
+}
+
+function drawPlayerHpBar() {
+  const p = state.player;
+  const width = 56;
+  const height = 7;
+  const x = p.x - width / 2;
+  const y = p.y - p.radius - 18;
+  const ratio = p.hp / p.maxHp;
+
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.fillRect(x, y, width, height);
+  ctx.fillStyle = ratio > 0.4 ? "#63f0b2" : "#ff8a99";
+  ctx.fillRect(x, y, width * ratio, height);
+  ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  ctx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
 }
 
 function render() {
@@ -287,7 +521,9 @@ function render() {
   ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
 
   drawGrid();
+  drawEnemies();
   drawPlayer();
+  drawPlayerHpBar();
 
   if (state.paused) {
     ctx.fillStyle = "rgba(0,0,0,0.35)";
@@ -297,6 +533,11 @@ function render() {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("PAUSED", VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2);
+  }
+
+  if (state.gameOver) {
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
   }
 }
 
@@ -318,4 +559,9 @@ window.addEventListener("orientationchange", () => {
   setTimeout(resize, 50);
 });
 
+restartButton.addEventListener("click", () => {
+  resetGame();
+});
+
+resetGame();
 requestAnimationFrame(frame);
