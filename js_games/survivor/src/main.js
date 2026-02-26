@@ -18,6 +18,7 @@ const hudTimer = document.getElementById("hud-timer");
 const hudOwnedWeapons = document.getElementById("hud-owned-weapons");
 const hudOwnedPassives = document.getElementById("hud-owned-passives");
 const hudBestRun = document.getElementById("hud-best-run");
+const pauseButton = document.getElementById("pause-button");
 const touchLeft = document.getElementById("touch-left");
 const joystickEl = document.getElementById("joystick");
 const xpLabel = document.getElementById("xp-label");
@@ -47,6 +48,7 @@ if (
   !hudOwnedWeapons ||
   !hudOwnedPassives ||
   !hudBestRun ||
+  !pauseButton ||
   !touchLeft ||
   !joystickEl ||
   !xpLabel ||
@@ -287,6 +289,20 @@ function isRunEnded() {
   return state.gameOver || state.victory;
 }
 
+function canTogglePause() {
+  return !isRunEnded() && !state.progression.levelUpActive;
+}
+
+function setPaused(nextPaused) {
+  state.paused = !!nextPaused;
+}
+
+function togglePause() {
+  if (!canTogglePause()) return;
+  setPaused(!state.paused);
+  updateHud();
+}
+
 function isSimulationPaused() {
   return isRunEnded() || state.paused || state.progression.levelUpActive;
 }
@@ -335,6 +351,8 @@ function updateHud() {
   hudOwnedWeapons.textContent = formatOwnedList(getOwnedWeaponIds(), WEAPON_DEFS_BY_ID, getWeaponLevel, "None");
   hudOwnedPassives.textContent = formatOwnedList(getOwnedPassiveIds(), PASSIVE_DEFS_BY_ID, getPassiveLevel, "None");
   hudBestRun.textContent = formatBestRunLine();
+  pauseButton.dataset.paused = String(state.paused);
+  pauseButton.textContent = state.paused ? "Resume" : "Pause";
   xpLabel.textContent = `XP ${state.progression.xp} / ${state.progression.xpToNext}`;
   xpPickupLabel.textContent = `Pickup ${Math.round(state.progression.pickupRadius)}`;
   xpBarFill.style.width = `${(state.progression.xpToNext > 0 ? (state.progression.xp / state.progression.xpToNext) : 0) * 100}%`;
@@ -655,7 +673,7 @@ function setKey(code, pressed) {
       input.keys.down = pressed;
       break;
     case "Escape":
-      if (pressed && !isRunEnded() && !state.progression.levelUpActive) state.paused = !state.paused;
+      if (pressed) togglePause();
       break;
     default:
       break;

@@ -85,6 +85,24 @@
       backdrop-filter: blur(6px);
     }
 
+    .hud-button {
+      pointer-events: auto;
+      appearance: none;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 10px;
+      backdrop-filter: blur(6px);
+    }
+
+    .hud-button[data-paused="true"] {
+      border-color: rgba(255, 213, 107, 0.45);
+      background: rgba(255, 213, 107, 0.12);
+    }
+
     #hud-left,
     #hud-right {
       display: flex;
@@ -432,6 +450,7 @@
           <div class="chip" id="hud-timer">10:00</div>
         </div>
         <div id="hud-right">
+          <button type="button" id="pause-button" class="hud-button" data-paused="false">Pause</button>
           <div class="chip">Move: WASD / Arrows / Left Stick</div>
         </div>
       </div>
