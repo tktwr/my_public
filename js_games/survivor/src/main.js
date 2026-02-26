@@ -1,5 +1,5 @@
 const VIRTUAL_WIDTH = 1280;
-const VIRTUAL_HEIGHT = 720;
+const VIRTUAL_HEIGHT = 1280;
 const BG_COLOR = "#08101d";
 const GRID_COLOR = "rgba(255,255,255,0.06)";
 const GRID_BOLD_COLOR = "rgba(255,255,255,0.12)";
