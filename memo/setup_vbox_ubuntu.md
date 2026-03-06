@@ -16,3 +16,8 @@ sudo apt install -f  # 念のための依存関係修復
 git-credential-manager configure
 git config --global credential.credentialStore secretservice
 ~~~
+
+## Setup
+~~~
+LC_ALL=C xdg-user-dirs-gtk-update
+~~~
