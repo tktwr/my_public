@@ -21,3 +21,11 @@ git config --global credential.credentialStore secretservice
 ~~~
 LC_ALL=C xdg-user-dirs-gtk-update
 ~~~
+
+## Shared folder
+~~~
+$ sudo apt install build-essential dkms linux-headers-$(uname -r)
+$ sudo VBoxLinuxAdditions.run
+$ sudo usermod -a -G vboxsf $USER
+$ id
+~~~
