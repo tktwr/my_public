@@ -17,15 +17,21 @@ git-credential-manager configure
 git config --global credential.credentialStore secretservice
 ~~~
 
+## Shared folder
+~~~
+sudo apt install build-essential dkms linux-headers-$(uname -r)
+sudo VBoxLinuxAdditions.run
+sudo usermod -a -G vboxsf {USER_NAME}
+id
+~~~
+
 ## Setup
 ~~~
 LC_ALL=C xdg-user-dirs-gtk-update
 ~~~
 
-## Shared folder
+## Fonts
 ~~~
-$ sudo apt install build-essential dkms linux-headers-$(uname -r)
-$ sudo VBoxLinuxAdditions.run
-$ sudo usermod -a -G vboxsf $USER
-$ id
+HackGenConsoleNF-Bold.ttf
+HackGenConsoleNF-Regular.ttf
 ~~~
